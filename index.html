@@ -544,7 +544,9 @@
         display: none;
       }
 
-      .gradient-editor {
+      .gradient-editor,
+      .text-editor,
+      .tool-panel {
         display: none;
         flex-direction: column;
         gap: 6px;
@@ -554,21 +556,7 @@
         padding: 10px;
       }
 
-      .gradient-editor.visible {
-        display: flex;
-      }
-
-      .text-editor {
-        display: none;
-        flex-direction: column;
-        gap: 6px;
-        background: #dfe1b2;
-        border: 1px solid #9a9b62;
-        border-radius: 6px;
-        padding: 10px;
-      }
-
-      .text-editor.visible {
+      .tool-panel.active {
         display: flex;
       }
 
@@ -664,6 +652,14 @@
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+      }
+
+      .panel-group.tool-panel {
+        display: none !important;
+      }
+
+      .panel-group.tool-panel.active {
+        display: flex !important;
       }
 
 
@@ -821,7 +817,7 @@
                 <button data-action="resize-canvas">Apply</button>
               </div>
             </div>
-            <div class="panel-group" id="layerTool">
+            <div class="panel-group tool-panel" id="layerTool" data-tool-panel="move">
               <div class="panel-header collapsible" data-collapsible="layer">
                 <span>Layer Transform</span>
                 <button class="collapse-toggle" aria-label="Toggle layer transform">▾</button>
@@ -840,7 +836,7 @@
                 <button data-action="apply-layer-transform">Apply Rotate/Flip</button>
               </div>
             </div>
-            <div class="panel-group gradient-editor" id="gradientEditor">
+            <div class="panel-group gradient-editor tool-panel" id="gradientEditor" data-tool-panel="gradient">
               <div class="panel-header collapsible" data-collapsible="gradient">
                 <span>Gradient Stops</span>
                 <button class="collapse-toggle" aria-label="Toggle gradient editor">▾</button>
@@ -871,7 +867,7 @@
                 <button data-action="apply-gradient">Apply Gradient</button>
               </div>
             </div>
-            <div class="panel-group text-editor" id="textEditor">
+            <div class="panel-group text-editor tool-panel" id="textEditor" data-tool-panel="text">
               <div class="panel-header collapsible" data-collapsible="text">
                 <span>Text Tool</span>
                 <button class="collapse-toggle" aria-label="Toggle text tool">▾</button>
@@ -1305,6 +1301,7 @@
         layer.fontSize = fontSize;
         layer.fontFamily = fontFamily;
         layer.textColor = color;
+        layer.isText = true;
         const textCanvas = createTextCanvas(text, fontSize, fontFamily, color);
         layer.canvas = textCanvas;
         if (finalize) captureSnapshot();
@@ -1336,17 +1333,22 @@
             focusX: state.gradient.focusX,
             focusY: state.gradient.focusY
           },
-          layers: state.layers.map((layer) => ({
-            id: layer.id,
-            name: layer.name,
-            x: layer.x,
-            y: layer.y,
-            opacity: layer.opacity,
-            visible: layer.visible,
-            width: layer.canvas.width,
-            height: layer.canvas.height,
-            data: layer.canvas.toDataURL('image/png')
-          })),
+        layers: state.layers.map((layer) => ({
+          id: layer.id,
+          name: layer.name,
+          x: layer.x,
+          y: layer.y,
+          opacity: layer.opacity,
+          visible: layer.visible,
+          width: layer.canvas.width,
+          height: layer.canvas.height,
+          data: layer.canvas.toDataURL('image/png'),
+          isText: layer.isText || false,
+          text: layer.text,
+          fontSize: layer.fontSize,
+          fontFamily: layer.fontFamily,
+          textColor: layer.textColor
+        })),
           windowBounds: { ...state.windowBounds }
         };
       }
@@ -1440,15 +1442,20 @@
             layerCanvas.width = entry.width;
             layerCanvas.height = entry.height;
             layerCanvas.getContext('2d').drawImage(img, 0, 0);
-            state.layers.push({
-              id: entry.id,
-              name: entry.name,
-              canvas: layerCanvas,
-              x: entry.x,
-              y: entry.y,
-              opacity: entry.opacity,
-              visible: entry.visible
-            });
+          state.layers.push({
+            id: entry.id,
+            name: entry.name,
+            canvas: layerCanvas,
+            x: entry.x,
+            y: entry.y,
+            opacity: entry.opacity,
+            visible: entry.visible,
+            isText: entry.isText,
+            text: entry.text,
+            fontSize: entry.fontSize,
+            fontFamily: entry.fontFamily,
+            textColor: entry.textColor
+          });
         } catch (error) {
           console.warn('Layer load failed', entry.name, error);
         }
@@ -1629,6 +1636,9 @@
             statusLayer.textContent = `Layer: ${layer.name}`;
             updateLayerPanel();
             captureLayerBase();
+            if (layer.isText) {
+              selectTool('text');
+            }
           });
         layersList.appendChild(entry);
       });
@@ -1661,6 +1671,12 @@
         layerRotateInput && (layerRotateInput.value = '0');
         layerFlipped = false;
         layerFlipBtn?.classList.remove('active');
+        if (layer.isText) {
+          textStringInput && (textStringInput.value = layer.text ?? '');
+          textFontSizeInput && (textFontSizeInput.value = layer.fontSize ?? 36);
+          textFontFamilySelect && (textFontFamilySelect.value = layer.fontFamily ?? 'Arial');
+          textColorInput && (textColorInput.value = layer.textColor ?? '#000000');
+        }
         captureLayerBase();
       }
 
@@ -1811,15 +1827,24 @@
         }
       }
 
+      function updateToolPanels() {
+        document.querySelectorAll('.tool-panel').forEach((panel) => {
+          const targets = (panel.dataset.toolPanel || '').split(' ');
+          const isActive = targets.includes(state.activeTool);
+          panel.classList.toggle('active', isActive);
+          panel.classList.toggle('collapsed', !isActive);
+        });
+      }
+
       document.querySelectorAll('.tool-btn').forEach((button) => {
         button.addEventListener('click', () => {
           document.querySelectorAll('.tool-btn').forEach((btn) => btn.classList.remove('active'));
           button.classList.add('active');
           state.activeTool = button.dataset.tool;
-          gradientEditor.classList.toggle('visible', state.activeTool === 'gradient');
-          textEditor?.classList.toggle('visible', state.activeTool === 'text');
+          updateToolPanels();
         });
       });
+      updateToolPanels();
 
       document.querySelector('[data-action="import"]').addEventListener('click', () => {
         document.getElementById('fileInput').click();
@@ -1906,7 +1931,12 @@
           x: layer.x + 20,
           y: layer.y + 20,
           opacity: layer.opacity,
-          visible: layer.visible
+          visible: layer.visible,
+          isText: layer.isText,
+          text: layer.text,
+          fontSize: layer.fontSize,
+          fontFamily: layer.fontFamily,
+          textColor: layer.textColor
         };
         state.layers.push(copy);
         state.selectedLayerId = copy.id;
