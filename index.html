@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IndieDraw Retro Editor</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180x180.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
@@ -363,6 +366,20 @@
         justify-content: space-between;
       }
 
+      .save-status {
+        padding: 6px 12px;
+        background: #dfe1b2;
+        border-top: 1px solid #b0ad85;
+        font-size: 12px;
+        color: #3a3a24;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .save-status span {
+        font-weight: 600;
+      }
+
       .layers-panel {
         border-left: 2px solid #7f7f5e;
         padding: 16px;
@@ -502,6 +519,27 @@
         padding: 6px;
         font-size: 12px;
         cursor: pointer;
+      }
+
+      .panel-group.icon-buttons {
+        display: flex;
+        flex-direction: row;
+        gap: 6px;
+        justify-content: flex-end;
+        align-items: stretch;
+      }
+
+      .panel-group.icon-buttons button {
+        flex: 1;
+        height: 40px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .panel-group.icon-buttons button i {
+        font-size: 18px;
       }
 
       .panel-header {
@@ -801,10 +839,10 @@
               </div>
               <div class="layers-list" id="layersList"></div>
             </div>
-            <div class="panel-group">
-              <button data-action="new-layer">New Solid Layer</button>
-              <button data-action="duplicate-layer">Duplicate</button>
-              <button data-action="delete-layer">Delete</button>
+            <div class="panel-group icon-buttons">
+              <button data-action="new-layer" title="New Solid Layer"><i class="fa-solid fa-plus"></i></button>
+              <button data-action="duplicate-layer" title="Duplicate Layer"><i class="fa-solid fa-copy"></i></button>
+              <button data-action="delete-layer" title="Delete Layer"><i class="fa-solid fa-trash"></i></button>
             </div>
             <div class="panel-group" id="canvasTool">
               <div class="panel-header collapsible" data-collapsible="canvas">
@@ -828,8 +866,8 @@
               </div>
               <div class="canvas-size-controls">
                 <label>Angle <input type="number" id="layerRotate" min="0" max="360" step="1" value="0" /></label>
-                <button class="aspect-lock" id="layerFlip" title="Flip horizontally">⇋</button>
-                <button class="aspect-lock active" id="layerAspectLock" title="Maintain aspect ratio">🔒</button>
+                <button class="aspect-lock" id="layerFlip" title="Flip horizontally"><i class="fa-solid fa-arrows-rotate"></i></button>
+                <button class="aspect-lock active" id="layerAspectLock" title="Maintain aspect ratio"><i class="fa-solid fa-lock"></i></button>
               </div>
               <div class="layer-transform-actions">
                 <button data-action="resize-layer">Apply Resize</button>
@@ -900,6 +938,10 @@
           </div>
         </aside>
       </div>
+      <div class="save-status" id="saveStatus">
+        <span id="saveStatusText">Last saved: --:--:--</span>
+        <span id="saveStatusHint">Autosaved locally</span>
+      </div>
     </div>
     <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
     <script>
@@ -953,8 +995,10 @@
       const layerWidthInput = document.getElementById('layerWidth');
       const layerHeightInput = document.getElementById('layerHeight');
       const layerAspectLock = document.getElementById('layerAspectLock');
+      const layerAspectLockIcon = layerAspectLock?.querySelector('i');
       const layerRotateInput = document.getElementById('layerRotate');
       const layerFlipBtn = document.getElementById('layerFlip');
+      const layerFlipIcon = layerFlipBtn?.querySelector('i');
       const fillColorInput = document.getElementById('fillColor');
       const docTitle = document.getElementById('docTitle');
       const docWindow = document.querySelector('.document-window');
@@ -965,6 +1009,8 @@
       const fileMenuDelete = document.querySelector('[data-action="menu-delete"]');
       const windowMenu = document.getElementById('windowMenu');
       const pluginMenuLensFlare = document.querySelector('[data-action="plugin-lens-flare"]');
+      const saveStatusText = document.getElementById('saveStatusText');
+      const saveStatusHint = document.getElementById('saveStatusHint');
       const STORAGE_KEY = 'indiedraw-workspace';
       const historyStack = [];
       const MAX_HISTORY = 30;
@@ -1011,10 +1057,24 @@
         };
       }
 
+      function formatTimeStamp(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '--:--:--';
+        return date.toLocaleTimeString();
+      }
+
+      function updateSaveStatus(time) {
+        if (!time) return;
+        lastSavedAt = time;
+        if (saveStatusText) saveStatusText.textContent = `Last saved: ${formatTimeStamp(time)}`;
+        if (saveStatusHint) saveStatusHint.textContent = 'Autosaved locally';
+      }
+
       function persistWindows() {
         const payload = {
           windows: windows.map(({ id, title, snapshot }) => ({ id, title, snapshot })),
-          activeWindowIndex
+          activeWindowIndex,
+          lastSaved: lastSavedAt ? lastSavedAt.toISOString() : null
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
       }
@@ -1131,7 +1191,10 @@
       function toggleLayerAspectLock() {
         layerAspectLockActive = !layerAspectLockActive;
         layerAspectLock?.classList.toggle('active', layerAspectLockActive);
-        layerAspectLock && (layerAspectLock.textContent = layerAspectLockActive ? '🔒' : '🔓');
+        if (layerAspectLockIcon) {
+          layerAspectLockIcon.classList.toggle('fa-lock', layerAspectLockActive);
+          layerAspectLockIcon.classList.toggle('fa-lock-open', !layerAspectLockActive);
+        }
       }
 
       function drawTransformedCanvas(base, width, height, angle, flipped) {
@@ -1143,6 +1206,7 @@
         ctx.translate(width / 2, height / 2);
         if (flipped) ctx.scale(-1, 1);
         ctx.rotate((angle * Math.PI) / 180);
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(base, -base.width / 2, -base.height / 2, base.width, base.height);
         ctx.restore();
         return temp;
@@ -1161,7 +1225,9 @@
         const temp = document.createElement('canvas');
         temp.width = newW;
         temp.height = newH;
-        temp.getContext('2d').drawImage(base, 0, 0, newW, newH);
+        const tempCtx = temp.getContext('2d');
+        tempCtx.imageSmoothingEnabled = false;
+        tempCtx.drawImage(base, 0, 0, newW, newH);
         const deltaX = (layerResizeBase.width - newW) / 2;
         const deltaY = (layerResizeBase.height - newH) / 2;
         layer.canvas = temp;
@@ -1354,7 +1420,10 @@
       }
 
       function saveWorkspace() {
+        lastSavedAt = new Date();
+        saveCurrentWindowSnapshot();
         persistWindows();
+        updateSaveStatus(lastSavedAt);
       }
 
       function loadImage(src) {
@@ -1384,6 +1453,9 @@
                 payload.activeWindowIndex ?? 0,
                 windows.length - 1
               );
+              if (payload.lastSaved) {
+                lastSavedAt = new Date(payload.lastSaved);
+              }
             }
           } catch (error) {
             console.warn('Failed to parse workspace', error);
@@ -1395,6 +1467,7 @@
         }
         updateWindowMenu();
         await applySnapshot(windows[activeWindowIndex].snapshot);
+        updateSaveStatus(lastSavedAt || new Date());
       }
 
       function captureSnapshot() {
@@ -2281,21 +2354,17 @@
       aspectLockBtn?.addEventListener('click', toggleAspectLock);
       layerWidthInput?.addEventListener('input', (event) => {
         handleLayerDimension('width', parseInt(event.target.value, 10));
-        applyLayerResize(false);
       });
       layerHeightInput?.addEventListener('input', (event) => {
         handleLayerDimension('height', parseInt(event.target.value, 10));
-        applyLayerResize(false);
       });
       layerAspectLock?.addEventListener('click', toggleLayerAspectLock);
       layerRotateInput?.addEventListener('input', (event) => {
         layerRotate = parseInt(event.target.value, 10) || 0;
-        applyLayerRotation(false);
       });
       layerFlipBtn?.addEventListener('click', () => {
         layerFlipped = !layerFlipped;
         layerFlipBtn.classList.toggle('active', layerFlipped);
-        applyLayerRotation(false);
       });
       document.querySelector('[data-action="apply-layer-transform"]').addEventListener('click', () => {
         applyLayerRotation(true);
