@@ -60,30 +60,51 @@
         color: #1b1b1b;
         border-bottom: 2px solid var(--panel-border);
         box-shadow: inset 0 1px 0 #fff;
+        justify-content: space-between;
       }
 
-      .top-bar .menu-group {
+      .menu-left {
         display: flex;
-        gap: 12px;
-        font-weight: bold;
-        color: #2b2b2b;
+        gap: 10px;
+        align-items: center;
       }
 
-      .top-bar .menu-group span {
-        cursor: default;
-        padding: 2px 6px;
+      .menu-group {
+        position: relative;
+      }
+
+      .menu-toggle {
+        border: 1px solid #a9a48a;
+        background: #ebe9d2;
+        color: #2a2a2a;
+        font-size: 12px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+
+      .menu-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        margin-top: 4px;
+        background: #fdfcf2;
+        border: 1px solid #a9a48a;
         border-radius: 4px;
-        transition: background 0.2s;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+        padding: 0;
+        display: none;
+        flex-direction: column;
+        min-width: 140px;
+        z-index: 20;
       }
 
-      .top-bar .menu-group span:hover {
-        background: rgba(0, 0, 0, 0.08);
+      .menu-group.active .menu-dropdown {
+        display: flex;
       }
 
       .top-bar .action-group {
         display: flex;
         gap: 8px;
-        margin-left: auto;
         align-items: center;
       }
 
@@ -266,6 +287,7 @@
         justify-content: center;
         align-items: center;
         background: #6b6b6b;
+        overflow: auto;
       }
 
       .resize-handle {
@@ -300,7 +322,8 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 16px;
+        padding: 80px;
+        background-clip: padding-box;
       }
 
       .canvas-shell.hand-active {
@@ -366,6 +389,10 @@
         min-height: 0;
       }
 
+      .layers-region.collapsed .layers-list {
+        display: none;
+      }
+
       .layers-header {
         font-size: 11px;
         letter-spacing: 0.2em;
@@ -384,6 +411,8 @@
         flex-direction: column;
         gap: 8px;
         padding-right: 4px;
+        max-height: 320px;
+        overflow-y: auto;
       }
 
       .layer-entry {
@@ -475,14 +504,58 @@
         cursor: pointer;
       }
 
-      .gradient-editor {
+      .panel-header {
         display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        color: #3a3a24;
+        text-transform: uppercase;
+      }
+
+      .collapsible .collapse-toggle {
+        border: none;
+        background: transparent;
+        font-size: 12px;
+        cursor: pointer;
+        padding: 0;
+        transition: transform 0.2s ease;
+      }
+
+      .panel-group.collapsed .canvas-size-controls,
+      .panel-group.collapsed .gradient-editor-content,
+      .layers-region.collapsed .layers-list {
+        display: none;
+      }
+
+      .panel-group.collapsed .collapse-toggle {
+        transform: rotate(-90deg);
+      }
+
+      .panel-group .gradient-editor-content {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .panel-group.collapsed .gradient-editor-content,
+      .panel-group.collapsed .canvas-size-controls {
+        display: none;
+      }
+
+      .gradient-editor {
+        display: none;
         flex-direction: column;
         gap: 6px;
         background: #dfe1b2;
         border: 1px solid #9a9b62;
         border-radius: 6px;
         padding: 10px;
+      }
+
+      .gradient-editor.visible {
+        display: flex;
       }
 
       .gradient-editor label {
@@ -557,6 +630,12 @@
         background: #fffefe;
       }
 
+      .layer-transform-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
 
       @media (max-width: 1100px) {
         .main-grid {
@@ -577,13 +656,21 @@
   <body>
     <div class="app-shell">
       <header class="top-bar">
-        <div class="menu-group">
-          <span>File</span>
-          <span>Edit</span>
-          <span>Layer</span>
-          <span>View</span>
+        <div class="menu-left">
+          <div class="menu-group" data-menu="file">
+            <button class="menu-toggle">File ▾</button>
+            <div class="menu-dropdown" id="fileMenu">
+              <button data-action="menu-new">New</button>
+              <button data-action="menu-save">Save</button>
+              <button data-action="menu-delete">Delete</button>
+            </div>
+          </div>
+          <div class="menu-group" data-menu="window">
+            <button class="menu-toggle">Window ▾</button>
+            <div class="menu-dropdown" id="windowMenu"></div>
+          </div>
         </div>
-          <div class="action-group">
+        <div class="action-group">
             <div class="zoom-badge" id="zoomBadge">100%</div>
             <button data-action="zoom-out">-</button>
             <button data-action="zoom-in">+</button>
@@ -671,9 +758,10 @@
         <aside class="layers-panel">
           <h2>LAYERS &amp; TOOLS</h2>
           <div class="layers-panel-body">
-            <div class="layers-region">
-              <div class="layers-header">
+            <div class="layers-region" data-collapsible="layers">
+              <div class="layers-header collapsible">
                 <span>Layer Stack</span>
+                <button class="collapse-toggle" aria-label="Toggle layers">▾</button>
               </div>
               <div class="layers-list" id="layersList"></div>
             </div>
@@ -683,30 +771,65 @@
               <button data-action="delete-layer">Delete</button>
             </div>
             <div class="panel-group" id="canvasTool">
-              <label>Canvas Size</label>
+              <div class="panel-header collapsible" data-collapsible="canvas">
+                <span>Canvas Size</span>
+                <button class="collapse-toggle" aria-label="Toggle canvas size">▾</button>
+              </div>
               <div class="canvas-size-controls">
                 <label>W <input type="number" id="canvasWidth" min="64" value="1200" step="10" /></label>
                 <label>H <input type="number" id="canvasHeight" min="64" value="800" step="10" /></label>
                 <button data-action="resize-canvas">Apply</button>
               </div>
             </div>
+            <div class="panel-group" id="layerTool">
+              <div class="panel-header collapsible" data-collapsible="layer">
+                <span>Layer Transform</span>
+                <button class="collapse-toggle" aria-label="Toggle layer transform">▾</button>
+              </div>
+              <div class="canvas-size-controls">
+                <label>W <input type="number" id="layerWidth" min="1" step="1" /></label>
+                <label>H <input type="number" id="layerHeight" min="1" step="1" /></label>
+              </div>
+              <div class="canvas-size-controls">
+                <label>Angle <input type="number" id="layerRotate" min="0" max="360" step="1" value="0" /></label>
+                <button class="aspect-lock" id="layerFlip" title="Flip horizontally">⇋</button>
+                <button class="aspect-lock active" id="layerAspectLock" title="Maintain aspect ratio">🔒</button>
+              </div>
+              <div class="layer-transform-actions">
+                <button data-action="resize-layer">Apply Resize</button>
+                <button data-action="apply-layer-transform">Apply Rotate/Flip</button>
+              </div>
+            </div>
             <div class="panel-group gradient-editor" id="gradientEditor">
-              <label>Gradient Stops</label>
-              <div class="stops" id="gradientStops"></div>
-              <button data-action="add-stop">Add Stop</button>
-              <label>
-                Radius <span id="radiusValue">50%</span>
-              </label>
-              <input type="range" id="gradientRadius" min="20" max="120" value="50" />
-              <label>
-                Focus X <span id="focusXValue">50%</span>
-              </label>
-              <input type="range" id="focusX" min="0" max="100" value="50" />
-              <label>
-                Focus Y <span id="focusYValue">50%</span>
-              </label>
-              <input type="range" id="focusY" min="0" max="100" value="50" />
-              <button data-action="apply-gradient">Apply Gradient</button>
+              <div class="panel-header collapsible" data-collapsible="gradient">
+                <span>Gradient Stops</span>
+                <button class="collapse-toggle" aria-label="Toggle gradient editor">▾</button>
+              </div>
+              <div class="gradient-editor-content gradient-editor-hidden">
+                <label>Type</label>
+                <select id="gradientType">
+                  <option value="radial">Radial</option>
+                  <option value="linear">Linear</option>
+                </select>
+                <label>Stops</label>
+                <div class="stops" id="gradientStops"></div>
+                <button data-action="add-stop">Add Stop</button>
+                <div class="gradient-controls">
+                  <label>
+                    Radius <span id="radiusValue">50%</span>
+                  </label>
+                  <input type="range" id="gradientRadius" min="20" max="120" value="50" />
+                  <label>
+                    Focus X <span id="focusXValue">50%</span>
+                  </label>
+                  <input type="range" id="focusX" min="0" max="100" value="50" />
+                  <label>
+                    Focus Y <span id="focusYValue">50%</span>
+                  </label>
+                  <input type="range" id="focusY" min="0" max="100" value="50" />
+                </div>
+                <button data-action="apply-gradient">Apply Gradient</button>
+              </div>
             </div>
           </div>
         </aside>
@@ -721,15 +844,16 @@
         zoom: 1,
         activeTool: 'move',
         marquee: null,
-        gradient: {
-          stops: [
-            { id: crypto.randomUUID(), color: '#1d9bf0', pos: 0 },
-            { id: crypto.randomUUID(), color: '#f0ad4e', pos: 100 }
-          ],
-          radius: 50,
-          focusX: 50,
-          focusY: 50
-        },
+      gradient: {
+        stops: [
+          { id: crypto.randomUUID(), color: '#1d9bf0', pos: 0 },
+          { id: crypto.randomUUID(), color: '#f0ad4e', pos: 100 }
+        ],
+        radius: 50,
+        focusX: 50,
+        focusY: 50,
+        mode: 'radial'
+      },
         windowBounds: { left: 160, top: 40, width: 780, height: 520 }
       };
 
@@ -749,25 +873,40 @@
       const radiusValue = document.getElementById('radiusValue');
       const focusXValue = document.getElementById('focusXValue');
       const focusYValue = document.getElementById('focusYValue');
+      const gradientTypeSelect = document.getElementById('gradientType');
       const resizeWidth = document.getElementById('resizeWidth');
       const resizeHeight = document.getElementById('resizeHeight');
       const canvasWidthInput = document.getElementById('canvasWidth');
       const canvasHeightInput = document.getElementById('canvasHeight');
       const aspectLockBtn = document.getElementById('aspectLockBtn');
+      const layerWidthInput = document.getElementById('layerWidth');
+      const layerHeightInput = document.getElementById('layerHeight');
+      const layerAspectLock = document.getElementById('layerAspectLock');
+      const layerRotateInput = document.getElementById('layerRotate');
+      const layerFlipBtn = document.getElementById('layerFlip');
       const fillColorInput = document.getElementById('fillColor');
       const docTitle = document.getElementById('docTitle');
       const docWindow = document.querySelector('.document-window');
       const docHeader = document.querySelector('.document-header');
       const resizeHandle = document.getElementById('resizeHandle');
+      const fileMenuNew = document.querySelector('[data-action="menu-new"]');
+      const fileMenuSave = document.querySelector('[data-action="menu-save"]');
+      const fileMenuDelete = document.querySelector('[data-action="menu-delete"]');
+      const windowMenu = document.getElementById('windowMenu');
       const STORAGE_KEY = 'indiedraw-workspace';
       const historyStack = [];
       const MAX_HISTORY = 30;
       let historyIndex = -1;
       let isApplyingHistory = false;
+      const windows = [];
+      let activeWindowIndex = 0;
       let aspectLockActive = true;
       let aspectRatio = state.canvasSize.width / state.canvasSize.height;
       let linkingInputs = false;
-
+      let layerAspectLockActive = true;
+      let layerRotate = 0;
+      let layerFlipped = false;
+      
       canvas.width = state.canvasSize.width;
       canvas.height = state.canvasSize.height;
       canvas.style.width = state.canvasSize.width + 'px';
@@ -776,7 +915,101 @@
       function syncCanvasInputs() {
         if (canvasWidthInput) canvasWidthInput.value = state.canvasSize.width;
         if (canvasHeightInput) canvasHeightInput.value = state.canvasSize.height;
+        if (gradientTypeSelect) gradientTypeSelect.value = state.gradient.mode;
       }
+
+      const DEFAULT_GRADIENT_STOPS = [
+        { color: '#1d9bf0', pos: 0 },
+        { color: '#f0ad4e', pos: 100 }
+      ];
+
+      function blankSnapshot() {
+        return {
+          canvasSize: { width: 1200, height: 800 },
+          zoom: 1,
+          selectedLayerId: null,
+          gradient: {
+            stops: DEFAULT_GRADIENT_STOPS.map((stop) => ({ ...stop })),
+            radius: 50,
+            focusX: 50,
+            focusY: 50
+          },
+          layers: [],
+          windowBounds: { ...state.windowBounds }
+        };
+      }
+
+      function persistWindows() {
+        const payload = {
+          windows: windows.map(({ id, title, snapshot }) => ({ id, title, snapshot })),
+          activeWindowIndex
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      }
+
+      function initializeWindows() {
+        windows.length = 0;
+        windows.push({
+          id: crypto.randomUUID(),
+          title: 'Untitled-1',
+          snapshot: blankSnapshot()
+        });
+        activeWindowIndex = 0;
+        updateWindowMenu();
+      }
+
+      function saveCurrentWindowSnapshot() {
+        if (!windows[activeWindowIndex]) return;
+        windows[activeWindowIndex].snapshot = serializeWorkspace();
+        persistWindows();
+      }
+
+      function updateWindowMenu() {
+        if (!windowMenu) return;
+        windowMenu.innerHTML = '';
+        windows.forEach((win, idx) => {
+          const button = document.createElement('button');
+          button.textContent = win.title + (idx === activeWindowIndex ? ' ✓' : '');
+          button.addEventListener('click', () => setActiveWindow(idx));
+          windowMenu.appendChild(button);
+        });
+      }
+
+      async function setActiveWindow(index) {
+        if (index === activeWindowIndex) return;
+        if (index < 0 || index >= windows.length) return;
+        saveCurrentWindowSnapshot();
+        activeWindowIndex = index;
+        await applySnapshot(windows[index].snapshot);
+        resetHistory();
+        updateWindowMenu();
+        persistWindows();
+      }
+
+      function resetHistory() {
+        historyStack.length = 0;
+        historyIndex = -1;
+        captureSnapshot();
+      }
+
+      async function createNewWindow() {
+        saveCurrentWindowSnapshot();
+        const title = `Untitled-${windows.length + 1}`;
+        windows.push({ id: crypto.randomUUID(), title, snapshot: blankSnapshot() });
+        await setActiveWindow(windows.length - 1);
+        updateWindowMenu();
+      }
+
+      function saveWindowTitle() {
+        const newTitle = prompt('Name this window', windows[activeWindowIndex]?.title || 'Untitled');
+        if (newTitle) {
+          windows[activeWindowIndex].title = newTitle;
+          updateWindowMenu();
+          updateDocTitle();
+        }
+      }
+
+      syncCanvasInputs();
 
       function updateDimensionInputs(kind, value) {
         if (kind === 'width') {
@@ -803,6 +1036,100 @@
         linkingInputs = false;
       }
 
+      function handleLayerDimension(kind, rawValue) {
+        if (!layerAspectLockActive || linkingInputs) return;
+        const value = Number(rawValue);
+        if (Number.isNaN(value)) return;
+        linkingInputs = true;
+        if (kind === 'width') {
+          const height = Math.max(1, Math.round(value / layerAspectRatio()));
+          layerHeightInput.value = height;
+        } else {
+          const width = Math.max(1, Math.round(value * layerAspectRatio()));
+          layerWidthInput.value = width;
+        }
+        linkingInputs = false;
+      }
+
+      function layerAspectRatio() {
+        const layer = state.layers.find((l) => l.id === state.selectedLayerId);
+        return layer && layer.canvas.height ? layer.canvas.width / layer.canvas.height : 1;
+      }
+
+      function toggleLayerAspectLock() {
+        layerAspectLockActive = !layerAspectLockActive;
+        layerAspectLock?.classList.toggle('active', layerAspectLockActive);
+        layerAspectLock && (layerAspectLock.textContent = layerAspectLockActive ? '🔒' : '🔓');
+      }
+
+      function drawTransformedCanvas(base, width, height, angle, flipped) {
+        const temp = document.createElement('canvas');
+        temp.width = width;
+        temp.height = height;
+        const ctx = temp.getContext('2d');
+        ctx.save();
+        ctx.translate(width / 2, height / 2);
+        if (flipped) ctx.scale(-1, 1);
+        ctx.rotate((angle * Math.PI) / 180);
+        ctx.drawImage(base, -base.width / 2, -base.height / 2, base.width, base.height);
+        ctx.restore();
+        return temp;
+      }
+
+      function applyLayerResize(finalize = true) {
+        const layer = state.layers.find((l) => l.id === state.selectedLayerId);
+        if (!layer) return;
+        const newW = Math.max(1, parseInt(layerWidthInput.value, 10));
+        const newH = Math.max(1, parseInt(layerHeightInput.value, 10));
+        if (!newW || !newH) return;
+        const base = layerResizeBase.canvas || layer.canvas;
+        if (!base) return;
+        if (newW === layer.canvas.width && newH === layer.canvas.height) return;
+        if (finalize) captureSnapshot();
+        const temp = document.createElement('canvas');
+        temp.width = newW;
+        temp.height = newH;
+        temp.getContext('2d').drawImage(base, 0, 0, newW, newH);
+        const deltaX = (layerResizeBase.width - newW) / 2;
+        const deltaY = (layerResizeBase.height - newH) / 2;
+        layer.canvas = temp;
+        layer.x = layerResizeBase.x + deltaX;
+        layer.y = layerResizeBase.y + deltaY;
+        renderCanvas();
+        updateLayerPanel();
+        if (finalize) saveWorkspace();
+        if (finalize) captureLayerBase();
+      }
+
+      function applyLayerRotation(finalize = true) {
+        const layer = state.layers.find((l) => l.id === state.selectedLayerId);
+        if (!layer) return;
+        const base = layerResizeBase.canvas || layer.canvas;
+        if (!base) return;
+        const rad = (layerRotate % 360) * (Math.PI / 180);
+        const cos = Math.abs(Math.cos(rad));
+        const sin = Math.abs(Math.sin(rad));
+        const targetWidth = Math.max(1, Math.round(cos * base.width + sin * base.height));
+        const targetHeight = Math.max(1, Math.round(sin * base.width + cos * base.height));
+        if (!layerFlipped && layerRotate % 360 === 0 && targetWidth === layer.canvas.width && targetHeight === layer.canvas.height) {
+          return;
+        }
+        if (finalize) captureSnapshot();
+        const temp = drawTransformedCanvas(base, targetWidth, targetHeight, layerRotate, layerFlipped);
+        const deltaX = (layerResizeBase.width - targetWidth) / 2;
+        const deltaY = (layerResizeBase.height - targetHeight) / 2;
+        layer.canvas = temp;
+        layer.x = layerResizeBase.x + deltaX;
+        layer.y = layerResizeBase.y + deltaY;
+        layerWidthInput && (layerWidthInput.value = targetWidth);
+        layerHeightInput && (layerHeightInput.value = targetHeight);
+        renderCanvas();
+        updateLayerPanel();
+        if (finalize) {
+          saveWorkspace();
+          captureLayerBase();
+        }
+      }
       function toggleAspectLock() {
         aspectLockActive = !aspectLockActive;
         aspectLockBtn?.classList.toggle('active', aspectLockActive);
@@ -843,12 +1170,7 @@
       }
 
       function saveWorkspace() {
-        try {
-          const snapshot = serializeWorkspace();
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-        } catch (error) {
-          console.warn('Failed to persist workspace', error);
-        }
+        persistWindows();
       }
 
       function loadImage(src) {
@@ -862,13 +1184,33 @@
 
       async function loadWorkspace() {
         const saved = localStorage.getItem(STORAGE_KEY);
-        if (!saved) return;
-        try {
-          const payload = JSON.parse(saved);
-          await applySnapshot(payload);
-        } catch (error) {
-          console.warn('Failed to parse workspace', error);
+        windows.length = 0;
+        if (saved) {
+          try {
+            const payload = JSON.parse(saved);
+            if (Array.isArray(payload.windows) && payload.windows.length) {
+              payload.windows.forEach((win) => {
+                windows.push({
+                  id: win.id || crypto.randomUUID(),
+                  title: win.title || 'Untitled',
+                  snapshot: win.snapshot || blankSnapshot()
+                });
+              });
+              activeWindowIndex = Math.min(
+                payload.activeWindowIndex ?? 0,
+                windows.length - 1
+              );
+            }
+          } catch (error) {
+            console.warn('Failed to parse workspace', error);
+          }
         }
+        if (!windows.length) {
+          windows.push({ id: crypto.randomUUID(), title: 'Untitled-1', snapshot: blankSnapshot() });
+          activeWindowIndex = 0;
+        }
+        updateWindowMenu();
+        await applySnapshot(windows[activeWindowIndex].snapshot);
       }
 
       function captureSnapshot() {
@@ -880,6 +1222,7 @@
           historyStack.shift();
         }
         historyIndex = historyStack.length - 1;
+        saveCurrentWindowSnapshot();
       }
 
       async function applySnapshot(snapshot) {
@@ -935,9 +1278,10 @@
         ? `Layer: ${state.layers.find((l) => l.id === state.selectedLayerId)?.name ?? 'Layer'}`
         : 'Layer: none';
       updateLayerPanel();
+      captureLayerBase();
       refreshZoomLabel();
-      ensureWindowFitsCanvas();
-      syncCanvasInputs();
+        ensureWindowFitsCanvas();
+        syncCanvasInputs();
       isApplyingHistory = false;
     }
 
@@ -1004,7 +1348,8 @@
 
       function updateLayerPanel() {
         layersList.innerHTML = '';
-        state.layers.forEach((layer) => {
+        const displayLayers = [...state.layers].slice().reverse();
+        displayLayers.forEach((layer) => {
           const entry = document.createElement('div');
           entry.className = 'layer-entry' + (state.selectedLayerId === layer.id ? ' active' : '');
           entry.dataset.layerId = layer.id;
@@ -1101,10 +1446,40 @@
             state.selectedLayerId = layer.id;
             statusLayer.textContent = `Layer: ${layer.name}`;
             updateLayerPanel();
+            captureLayerBase();
           });
         layersList.appendChild(entry);
       });
         updateDocTitle();
+        updateSelectedLayerInputs();
+      }
+
+      const layerResizeBase = { canvas: null, width: 0, height: 0, x: 0, y: 0 };
+
+      function captureLayerBase() {
+        const layer = state.layers.find((l) => l.id === state.selectedLayerId);
+        if (!layer) return;
+        const baseCanvas = document.createElement('canvas');
+        baseCanvas.width = layer.canvas.width;
+        baseCanvas.height = layer.canvas.height;
+        baseCanvas.getContext('2d').drawImage(layer.canvas, 0, 0);
+        layerResizeBase.canvas = baseCanvas;
+        layerResizeBase.width = layer.canvas.width;
+        layerResizeBase.height = layer.canvas.height;
+        layerResizeBase.x = layer.x;
+        layerResizeBase.y = layer.y;
+      }
+
+      function updateSelectedLayerInputs() {
+        const layer = state.layers.find((l) => l.id === state.selectedLayerId);
+        if (!layer || !layerWidthInput || !layerHeightInput) return;
+        layerWidthInput.value = Math.round(layer.canvas.width);
+        layerHeightInput.value = Math.round(layer.canvas.height);
+        layerRotate = 0;
+        layerRotateInput && (layerRotateInput.value = '0');
+        layerFlipped = false;
+        layerFlipBtn?.classList.remove('active');
+        captureLayerBase();
       }
 
       function currentLayerName() {
@@ -1115,7 +1490,8 @@
       function updateDocTitle() {
         if (!docTitle) return;
         const percent = Math.round(state.zoom * 100);
-        docTitle.textContent = `Untitled-1 @ ${percent}% (${currentLayerName()})`;
+        const title = windows[activeWindowIndex]?.title || 'Untitled';
+        docTitle.textContent = `${title} @ ${percent}% (${currentLayerName()})`;
       }
 
       function applyWindowBounds() {
@@ -1235,6 +1611,7 @@
         updateLayerPanel();
         renderCanvas();
         saveWorkspace();
+        captureLayerBase();
       }
 
       function handleFiles(files) {
@@ -1257,7 +1634,7 @@
           document.querySelectorAll('.tool-btn').forEach((btn) => btn.classList.remove('active'));
           button.classList.add('active');
           state.activeTool = button.dataset.tool;
-          gradientEditor.style.opacity = state.activeTool === 'gradient' ? '1' : '0.35';
+          gradientEditor.classList.toggle('visible', state.activeTool === 'gradient');
         });
       });
 
@@ -1402,8 +1779,8 @@
             type: 'pan',
             startX: event.clientX,
             startY: event.clientY,
-            scrollLeft: canvasShell.scrollLeft,
-            scrollTop: canvasShell.scrollTop
+            startScrollLeft: canvasShell.scrollLeft,
+            startScrollTop: canvasShell.scrollTop
           };
           canvasShell.classList.add('hand-active');
           return;
@@ -1459,8 +1836,8 @@
         if (pointerState.type === 'pan') {
           const dx = event.clientX - pointerState.startX;
           const dy = event.clientY - pointerState.startY;
-          canvasShell.scrollLeft = pointerState.scrollLeft - dx;
-          canvasShell.scrollTop = pointerState.scrollTop - dy;
+          canvasShell.scrollLeft = pointerState.startScrollLeft - dx;
+          canvasShell.scrollTop = pointerState.startScrollTop - dy;
           return;
         }
         if (pointerState.type === 'marquee') {
@@ -1665,6 +2042,9 @@
         captureSnapshot();
         setCanvasDimensions(width, height);
       });
+      document.querySelector('[data-action="resize-layer"]').addEventListener('click', () => {
+        applyLayerResize();
+      });
 
       [resizeWidth, canvasWidthInput].forEach((input) => {
         input?.addEventListener('input', (event) => {
@@ -1685,6 +2065,29 @@
         });
       });
       aspectLockBtn?.addEventListener('click', toggleAspectLock);
+      layerWidthInput?.addEventListener('input', (event) => {
+        handleLayerDimension('width', parseInt(event.target.value, 10));
+        applyLayerResize(false);
+      });
+      layerHeightInput?.addEventListener('input', (event) => {
+        handleLayerDimension('height', parseInt(event.target.value, 10));
+        applyLayerResize(false);
+      });
+      layerAspectLock?.addEventListener('click', toggleLayerAspectLock);
+      layerRotateInput?.addEventListener('input', (event) => {
+        layerRotate = parseInt(event.target.value, 10) || 0;
+      });
+      layerFlipBtn?.addEventListener('click', () => {
+        layerFlipped = !layerFlipped;
+        layerFlipBtn.classList.toggle('active', layerFlipped);
+      });
+      document.querySelector('[data-action="apply-layer-transform"]').addEventListener('click', () => {
+        applyLayerRotation(true);
+      });
+      gradientTypeSelect?.addEventListener('change', (event) => {
+        state.gradient.mode = event.target.value;
+        renderPreview();
+      });
 
       function resizeDocument(width, height) {
         captureSnapshot();
@@ -1717,6 +2120,7 @@
         resizeWidth.value = width;
         resizeHeight.value = height;
         syncCanvasInputs();
+        resetPan();
         saveWorkspace();
         ensureWindowFitsCanvas();
       }
@@ -1727,16 +2131,21 @@
         captureSnapshot();
         const ctxLayer = layer.canvas.getContext('2d');
         ctxLayer.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-        const centerX = (state.gradient.focusX / 100) * layer.canvas.width;
-        const centerY = (state.gradient.focusY / 100) * layer.canvas.height;
-        const gradient = ctxLayer.createRadialGradient(
-          centerX,
-          centerY,
-          0,
-          centerX,
-          centerY,
-          (Math.max(layer.canvas.width, layer.canvas.height) * state.gradient.radius) / 100
-        );
+        let gradient;
+        if (state.gradient.mode === 'linear') {
+          gradient = ctxLayer.createLinearGradient(0, layer.canvas.height / 2, layer.canvas.width, layer.canvas.height / 2);
+        } else {
+          const centerX = (state.gradient.focusX / 100) * layer.canvas.width;
+          const centerY = (state.gradient.focusY / 100) * layer.canvas.height;
+          gradient = ctxLayer.createRadialGradient(
+            centerX,
+            centerY,
+            0,
+            centerX,
+            centerY,
+            (Math.max(layer.canvas.width, layer.canvas.height) * state.gradient.radius) / 100
+          );
+        }
         state.gradient.stops
           .sort((a, b) => a.pos - b.pos)
           .forEach((stop) => {
@@ -1825,12 +2234,63 @@
         if (!document.querySelector('.gradient-preview')) {
           const preview = document.createElement('div');
           preview.className = 'gradient-preview';
-          gradientEditor.insertBefore(preview, gradientEditor.querySelector('[data-action="add-stop"]'));
+          const gradientContent = gradientEditor.querySelector('.gradient-editor-content');
+          const addButton = gradientContent?.querySelector('[data-action="add-stop"]');
+          if (gradientContent && addButton) {
+            gradientContent.insertBefore(preview, addButton);
+          } else {
+            gradientEditor.appendChild(preview);
+          }
         }
         renderGradientStops();
       }
 
       initGradientPreview();
+      setupCollapsibles();
+      fileMenuNew?.addEventListener('click', async (event) => {
+        event.preventDefault();
+        await createNewWindow();
+      });
+      fileMenuSave?.addEventListener('click', (event) => {
+        event.preventDefault();
+        saveWindowTitle();
+      });
+      fileMenuDelete?.addEventListener('click', async (event) => {
+        event.preventDefault();
+        if (windows.length <= 1) {
+          alert('At least one window must remain.');
+          return;
+        }
+        if (!confirm('Are you sure you want to delete this window?')) return;
+        windows.splice(activeWindowIndex, 1);
+        const nextIndex = Math.max(0, activeWindowIndex - 1);
+        await setActiveWindow(nextIndex);
+        persistWindows();
+      });
+
+      function setupMenus() {
+        const timers = new Map();
+        document.querySelectorAll('.menu-group').forEach((group) => {
+          group.addEventListener('mouseenter', () => {
+            clearTimeout(timers.get(group));
+            timers.set(
+              group,
+              setTimeout(() => {
+                group.classList.add('active');
+              }, 180)
+            );
+          });
+          group.addEventListener('mouseleave', () => {
+            clearTimeout(timers.get(group));
+            timers.set(
+              group,
+              setTimeout(() => {
+                group.classList.remove('active');
+              }, 220)
+            );
+          });
+        });
+      }
 
       function renderLoop() {
         renderCanvas();
@@ -1847,6 +2307,7 @@
 
       window.addEventListener('beforeunload', saveWorkspace);
 
+      setupMenus();
       applyWindowBounds();
       start();
 
@@ -1868,6 +2329,81 @@
         temp.getContext('2d').fillRect(0, 0, temp.width, temp.height);
         addLayer(temp, 'New Layer');
       });
+
+      document.addEventListener('paste', async (event) => {
+        const handled = await tryHandlePaste(event.clipboardData);
+        if (handled) {
+          event.preventDefault();
+          return;
+        }
+        if (navigator.clipboard?.read) {
+          try {
+            const clipItems = await navigator.clipboard.read();
+            for (const clipItem of clipItems) {
+              for (const type of clipItem.types) {
+                if (!type.startsWith('image/')) continue;
+                const blob = await clipItem.getType(type);
+                await createLayerFromBlob(blob);
+                event.preventDefault();
+                return;
+              }
+            }
+          } catch (error) {
+            console.warn('Clipboard read failed', error);
+          }
+        }
+      });
+
+      async function tryHandlePaste(clipboardData) {
+        if (!clipboardData) return false;
+        const items = Array.from(clipboardData.items || []);
+        for (const item of items) {
+          if (!item) continue;
+          const isImage = item.kind === 'file' ? item.type.startsWith('image/') : item.type.startsWith('image/');
+          if (!isImage) continue;
+          const blob = item.getAsFile ? item.getAsFile() : null;
+          if (!blob) continue;
+          await createLayerFromBlob(blob);
+          return true;
+        }
+        return false;
+      }
+
+      async function createLayerFromBlob(blob) {
+        if (!blob) return;
+        try {
+          const imageUrl = URL.createObjectURL(blob);
+          const img = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = reject;
+            image.src = imageUrl;
+          });
+          const canvasTemp = document.createElement('canvas');
+          canvasTemp.width = img.width;
+          canvasTemp.height = img.height;
+          canvasTemp.getContext('2d').drawImage(img, 0, 0);
+          URL.revokeObjectURL(imageUrl);
+          addLayer(canvasTemp, 'Pasted Layer');
+        } catch (error) {
+          console.warn('Paste failed', error);
+        }
+      }
+
+      function setupCollapsibles() {
+        document.querySelectorAll('.collapse-toggle').forEach((toggle) => {
+          const collapsible = toggle.closest('[data-collapsible]');
+          const panel = collapsible && collapsible.closest('.panel-group');
+          toggle.addEventListener('click', () => {
+            if (collapsible) {
+              collapsible.classList.toggle('collapsed');
+            }
+            if (panel) {
+              panel.classList.toggle('collapsed');
+            }
+          });
+        });
+      }
 
       document.querySelector('[data-action="delete-layer"]').addEventListener('click', () => {
         deleteLayer();
